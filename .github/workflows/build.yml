@@ -5,25 +5,31 @@ on:
     branches: [ master ]
   workflow_dispatch:
  
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+ 
 jobs:
   build:
     runs-on: windows-2022
+    timeout-minutes: 60
  
     steps:
     - name: Checkout
       uses: actions/checkout@v4
  
-    - name: Download and Install WDK
+    - name: Install WDK
       shell: pwsh
       run: |
-        Write-Host "Downloading WDK..."
-        curl.exe -L --retry 3 -o "$env:TEMP\wdksetup.exe" "https://go.microsoft.com/fwlink/?linkid=2307734"
-        $size = (Get-Item "$env:TEMP\wdksetup.exe").Length
-        Write-Host "File size: $size bytes"
-        if ($size -lt 1000000) { throw "Download failed or corrupted" }
-        Write-Host "Installing WDK..."
-        $proc = Start-Process -FilePath "$env:TEMP\wdksetup.exe" -ArgumentList "/quiet /norestart /ceip off" -Wait -PassThru
-        Write-Host "Exit code: $($proc.ExitCode)"
+        Write-Host "Downloading WDK bootstrapper..."
+        curl.exe -L -o "$env:TEMP\wdksetup.exe" "https://go.microsoft.com/fwlink/?linkid=2307734"
+        Write-Host "Running WDK installer (will download ~2GB, takes 10-20 min)..."
+        $proc = Start-Process -FilePath "$env:TEMP\wdksetup.exe" `
+          -ArgumentList "/quiet /norestart /ceip off" `
+          -Wait -PassThru
+        Write-Host "WDK exit code: $($proc.ExitCode)"
+        if ($proc.ExitCode -ne 0 -and $proc.ExitCode -ne 3010) {
+          throw "WDK install failed with exit code $($proc.ExitCode)"
+        }
  
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
@@ -33,10 +39,9 @@ jobs:
       run: |
         msbuild SimpleSvm.sln /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off
  
-    - name: Upload artifact
+    - name: Upload SimpleSvm.sys
       uses: actions/upload-artifact@v4
       with:
         name: SimpleSvm-driver
         path: SimpleSvm\x64\Release\SimpleSvm.sys
         if-no-files-found: warn
- 
