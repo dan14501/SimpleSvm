@@ -1,40 +1,42 @@
 name: Build SimpleSvm
-
+ 
 on:
   push:
     branches: [ master ]
   workflow_dispatch:
-
+ 
 jobs:
   build:
     runs-on: windows-2022
-
+ 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-
+ 
     - name: Download and Install WDK
       shell: pwsh
       run: |
-        Write-Host "Downloading WDK 10.0.26100..."
-        Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?linkid=2307734" -OutFile "$env:TEMP\wdksetup.exe" -UseBasicParsing
+        Write-Host "Downloading WDK..."
+        curl.exe -L --retry 3 -o "$env:TEMP\wdksetup.exe" "https://go.microsoft.com/fwlink/?linkid=2307734"
+        $size = (Get-Item "$env:TEMP\wdksetup.exe").Length
+        Write-Host "File size: $size bytes"
+        if ($size -lt 1000000) { throw "Download failed or corrupted" }
         Write-Host "Installing WDK..."
         $proc = Start-Process -FilePath "$env:TEMP\wdksetup.exe" -ArgumentList "/quiet /norestart /ceip off" -Wait -PassThru
-        Write-Host "WDK install exit code: $($proc.ExitCode)"
-
+        Write-Host "Exit code: $($proc.ExitCode)"
+ 
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
-
+ 
     - name: Build SimpleSvm
       shell: pwsh
       run: |
-        msbuild SimpleSvm.sln /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off /p:IntDir=obj\x64\Release\ /p:OutDir=bin\x64\Release\
-
-    - name: Upload SimpleSvm.sys
+        msbuild SimpleSvm.sln /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off
+ 
+    - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: SimpleSvm-driver
-        path: |
-          bin\x64\Release\SimpleSvm.sys
-          SimpleSvm\x64\Release\SimpleSvm.sys
+        path: SimpleSvm\x64\Release\SimpleSvm.sys
         if-no-files-found: warn
+ 
