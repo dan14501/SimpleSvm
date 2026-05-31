@@ -17,64 +17,26 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    # 1. Отключаем Defender (иначе блокирует wdksetup.exe)
-    - name: Disable Defender
-      shell: pwsh
-      run: |
-        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-
-    # 2. Скачиваем WDK bootstrapper в надёжную папку (не TEMP)
-    - name: Download WDK bootstrapper
-      shell: pwsh
-      run: |
-        $url = "https://go.microsoft.com/fwlink/?linkid=2307734"
-        $out = "C:\wdksetup.exe"
-        Write-Host "Downloading WDK from $url ..."
-        $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing -MaximumRedirection 10
-        $size = (Get-Item $out).Length
-        Write-Host "Downloaded $size bytes"
-        if ($size -lt 60MB) { throw "File too small, download failed" }
-        Unblock-File -Path $out
-
-    # 3. Устанавливаем WDK (тихо, без перезагрузки)
+    # Установка WDK через winget
     - name: Install WDK
       shell: pwsh
       run: |
-        $exe = "C:\wdksetup.exe"
-        Write-Host "Running installer (this takes 10-20 min)..."
-        $process = Start-Process -FilePath $exe -ArgumentList "/quiet","/norestart","/ceip","off" -Wait -PassThru -NoNewWindow
-        Write-Host "Exit code: $($process.ExitCode)"
-        # 3010 = перезагрузка требуется (игнорируем)
-        if ($process.ExitCode -ne 0 -and $process.ExitCode -ne 3010) {
-          throw "Installation failed with exit code $($process.ExitCode)"
-        }
+        Write-Host "Installing Windows Driver Kit (WDK) via winget..."
+        # Команда для установки последней версии WDK
+        winget install Microsoft.WindowsWDK --accept-package-agreements --accept-source-agreements
+        Write-Host "WDK installation command completed."
 
-        # Даём время на завершение установки
-        Start-Sleep -Seconds 30
-
-    # 4. Включаем Defender обратно (не обязательно, но вежливо)
-    - name: Enable Defender
-      shell: pwsh
-      run: |
-        Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue
-
-    # 5. Setup MSBuild
+    # Настройка MSBuild
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    # 6. Сборка драйвера
+    # Сборка проекта
     - name: Build SimpleSvm
       shell: pwsh
       run: |
-        # Добавляем пути WDK в окружение (иногда требуется)
-        $kitPath = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
-        if (Test-Path $kitPath) {
-          $env:PATH += ";$kitPath"
-        }
         msbuild SimpleSvm.sln /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off
 
-    # 7. Сохраняем результат
+    # Сохранение артефакта
     - name: Upload SimpleSvm.sys
       uses: actions/upload-artifact@v4
       with:
