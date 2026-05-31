@@ -17,11 +17,9 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    # Установка WDK через Chocolatey
     - name: Install WDK via Chocolatey
       shell: pwsh
       run: |
-        # Проверяем, есть ли Chocolatey (обычно предустановлен)
         if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
           Write-Host "Installing Chocolatey..."
           Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -30,16 +28,10 @@ jobs:
         } else {
           Write-Host "Chocolatey is already installed."
         }
-        
-        # Устанавливаем WDK (последняя стабильная версия)
         Write-Host "Installing Windows Driver Kit (WDK)..."
         choco install wdk -y --no-progress --limit-output
-        
-        # Устанавливаем Windows SDK (необходим для компиляции драйверов)
         Write-Host "Installing Windows SDK..."
         choco install windows-sdk-10.0 -y --no-progress --limit-output
-        
-        # Обновляем PATH в текущей сессии
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
         Write-Host "Installation completed."
 
@@ -49,17 +41,17 @@ jobs:
     - name: Build SimpleSvm
       shell: pwsh
       run: |
-        # Добавляем пути к инструментам WDK (на всякий случай)
         $wdkBin = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
         if (Test-Path $wdkBin) {
           $env:Path += ";$wdkBin"
         }
-        # Сборка
         msbuild SimpleSvm.sln /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off
 
     - name: Upload SimpleSvm.sys
       uses: actions/upload-artifact@v4
       with:
         name: SimpleSvm-driver
-        path: SimpleSvm\x64\Release\SimpleSvm.sys
+        path: |
+          x64\Release\SimpleSvm.sys
+          **\*.sys
         if-no-files-found: error
