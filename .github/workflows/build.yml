@@ -17,26 +17,44 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    # Установка WDK через winget
+    # Установка Chocolatey (если ещё не установлен)
+    - name: Install Chocolatey
+      shell: pwsh
+      run: |
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        refreshenv
+
+    # Установка WDK через Chocolatey
     - name: Install WDK
       shell: pwsh
       run: |
-        Write-Host "Installing Windows Driver Kit (WDK) via winget..."
-        # Команда для установки последней версии WDK
-        winget install Microsoft.WindowsWDK --accept-package-agreements --accept-source-agreements
-        Write-Host "WDK installation command completed."
+        choco install wdk --version=10.1.26100.1 -y --no-progress --limit-output
+        # Если не сработает, попробуем альтернативный пакет:
+        # choco install windows-sdk-10-version-2004-wdk -y
+        refreshenv
 
     # Настройка MSBuild
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
-    # Сборка проекта
+    # Сборка драйвера
     - name: Build SimpleSvm
       shell: pwsh
       run: |
+        # Проверяем наличие WDK
+        $wdkPath = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
+        if (Test-Path $wdkPath) {
+          Write-Host "WDK found at $wdkPath"
+          $env:PATH += ";$wdkPath"
+        } else {
+          Write-Host "WDK not found at expected path, searching..."
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -ErrorAction SilentlyContinue
+        }
         msbuild SimpleSvm.sln /p:Configuration=Release /p:Platform=x64 /p:SignMode=Off
 
-    # Сохранение артефакта
+    # Сохранение результата
     - name: Upload SimpleSvm.sys
       uses: actions/upload-artifact@v4
       with:
